@@ -13,6 +13,9 @@ import rx.functions.Cancellable;
 class MerlinAction implements Action1<Emitter<NetworkStatus>> {
 
     private Merlin merlin;
+    private Connectable connectable;
+    private Disconnectable disconnectable;
+    private Bindable bindable;
 
     MerlinAction(Merlin merlin) {
         this.merlin = merlin;
@@ -20,13 +23,20 @@ class MerlinAction implements Action1<Emitter<NetworkStatus>> {
 
     @Override
     public void call(Emitter<NetworkStatus> stateEmitter) {
-        merlin.registerConnectable(createConnectable(stateEmitter));
-        merlin.registerDisconnectable(createDisconnectable(stateEmitter));
-        merlin.registerBindable(createBindable(stateEmitter));
+        createRegisterables(stateEmitter);
+        merlin.registerConnectable(connectable);
+        merlin.registerDisconnectable(disconnectable);
+        merlin.registerBindable(bindable);
 
         stateEmitter.setCancellation(createCancellable());
 
         merlin.bind();
+    }
+
+    private void createRegisterables(Emitter<NetworkStatus> stateEmitter) {
+        connectable = createConnectable(stateEmitter);
+        disconnectable = createDisconnectable(stateEmitter);
+        bindable = createBindable(stateEmitter);
     }
 
     private Connectable createConnectable(final Emitter<NetworkStatus> stateEmitter) {
@@ -61,6 +71,9 @@ class MerlinAction implements Action1<Emitter<NetworkStatus>> {
             @Override
             public void cancel() throws Exception {
                 merlin.unbind();
+                connectable = null;
+                disconnectable = null;
+                bindable = null;
             }
         };
     }
