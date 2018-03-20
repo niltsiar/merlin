@@ -39,6 +39,7 @@ class MerlinServiceBinder {
 
     void unbind() {
         if (MerlinService.isBound() && merlinServiceConnection != null) {
+            merlinServiceConnection.disconnect();
             context.unbindService(merlinServiceConnection);
             context.stopService(new Intent(context, MerlinService.class));
             merlinServiceConnection = null;
@@ -51,6 +52,9 @@ class MerlinServiceBinder {
         private final ListenerHolder listenerHolder;
         private final Endpoint endpoint;
         private final ResponseCodeValidator validator;
+        private MerlinService.LocalBinder merlinServiceBinder;
+        private ConnectivityChangesRegister connectivityChangesRegister;
+        private ConnectivityChangesForwarder connectivityChangesForwarder;
 
         MerlinServiceConnection(Context context, ListenerHolder listenerHolder, Endpoint endpoint, ResponseCodeValidator validator) {
             this.context = context;
@@ -62,10 +66,10 @@ class MerlinServiceBinder {
         @Override
         public void onServiceConnected(ComponentName name, IBinder binder) {
             Logger.d("onServiceConnected");
-            MerlinService.LocalBinder merlinServiceBinder = ((MerlinService.LocalBinder) binder);
+            merlinServiceBinder = ((MerlinService.LocalBinder) binder);
             ConnectivityManager connectivityManager = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
             ConnectivityChangeEventExtractor connectivityChangeEventExtractor = new ConnectivityChangeEventExtractor(connectivityManager);
-            ConnectivityChangesRegister connectivityChangesRegister = new ConnectivityChangesRegister(
+            connectivityChangesRegister = new ConnectivityChangesRegister(
                     context,
                     connectivityManager,
                     new AndroidVersion(),
@@ -73,7 +77,7 @@ class MerlinServiceBinder {
             );
             NetworkStatusRetriever networkStatusRetriever = new NetworkStatusRetriever(MerlinsBeard.from(context));
             EndpointPinger endpointPinger = EndpointPinger.withCustomEndpointAndValidation(endpoint, validator);
-            ConnectivityChangesForwarder connectivityChangesForwarder = new ConnectivityChangesForwarder(
+            connectivityChangesForwarder = new ConnectivityChangesForwarder(
                     networkStatusRetriever,
                     listenerHolder.disconnectCallbackManager,
                     listenerHolder.connectCallbackManager,
@@ -81,14 +85,19 @@ class MerlinServiceBinder {
                     endpointPinger
             );
 
-            merlinServiceBinder.setConnectivityChangesRegister(connectivityChangesRegister);
-            merlinServiceBinder.setConnectivityChangesForwarder(connectivityChangesForwarder);
-            merlinServiceBinder.onBindComplete();
+            merlinServiceBinder.addConnectivityChangesRegister(connectivityChangesRegister);
+            merlinServiceBinder.addConnectivityChangesForwarder(connectivityChangesForwarder);
+            merlinServiceBinder.onBindComplete(connectivityChangesRegister, connectivityChangesForwarder);
         }
 
         @Override
         public void onServiceDisconnected(ComponentName name) {
             // do nothing.
+        }
+
+        public void disconnect() {
+            merlinServiceBinder.removeConnectivityChangesRegister(connectivityChangesRegister);
+            merlinServiceBinder.removeConnectivityChangesForwarder(connectivityChangesForwarder);
         }
 
     }
