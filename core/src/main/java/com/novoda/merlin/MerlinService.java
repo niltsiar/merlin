@@ -31,6 +31,8 @@ public class MerlinService extends Service {
     public boolean onUnbind(Intent intent) {
         isBound = false;
 
+        clearBoundDependencies();
+
         binder = null;
         return super.onUnbind(intent);
     }
@@ -52,9 +54,17 @@ public class MerlinService extends Service {
     }
 
     private void forward(ConnectivityChangeEvent connectivityChangeEvent) {
-        for(ConnectivityChangesForwarder connectivityChangesForwarder : connectivityChangesForwarders) {
+        for (ConnectivityChangesForwarder connectivityChangesForwarder : connectivityChangesForwarders) {
             connectivityChangesForwarder.forward(connectivityChangeEvent);
         }
+    }
+
+    private void clearBoundDependencies() {
+        connectivityChangesForwarders.clear();
+        for (ConnectivityChangesRegister connectivityChangesRegister : connectivityChangesRegisters) {
+            connectivityChangesRegister.unregister();
+        }
+        connectivityChangesRegisters.clear();
     }
 
     public interface ConnectivityChangesNotifier {
