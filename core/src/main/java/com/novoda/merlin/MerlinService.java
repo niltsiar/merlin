@@ -5,14 +5,17 @@ import android.content.Intent;
 import android.os.Binder;
 import android.os.IBinder;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class MerlinService extends Service {
 
     private static boolean isBound;
 
     private IBinder binder = new LocalBinder();
 
-    private ConnectivityChangesRegister connectivityChangesRegister;
-    private ConnectivityChangesForwarder connectivityChangesForwarder;
+    private List<ConnectivityChangesRegister> connectivityChangesRegisters = new ArrayList<>();
+    private List<ConnectivityChangesForwarder> connectivityChangesForwarders = new ArrayList<>();
 
     public static boolean isBound() {
         return isBound;
@@ -27,33 +30,30 @@ public class MerlinService extends Service {
     @Override
     public boolean onUnbind(Intent intent) {
         isBound = false;
-        if (connectivityChangesRegister != null) {
-            connectivityChangesRegister.unregister();
-            connectivityChangesRegister = null;
-
-        }
-
-        if (connectivityChangesForwarder != null) {
-            connectivityChangesForwarder = null;
-        }
 
         binder = null;
         return super.onUnbind(intent);
     }
 
-    private void start() {
-        assertDependenciesBound();
+    private void start(ConnectivityChangesRegister connectivityChangesRegister, ConnectivityChangesForwarder connectivityChangesForwarder) {
+        assertDependenciesBound(connectivityChangesRegister, connectivityChangesForwarder);
         connectivityChangesForwarder.forwardInitialNetworkStatus();
         connectivityChangesRegister.register(((ConnectivityChangesNotifier) binder));
     }
 
-    private void assertDependenciesBound() {
-        if (MerlinService.this.connectivityChangesRegister == null) {
+    private void assertDependenciesBound(ConnectivityChangesRegister connectivityChangesRegister, ConnectivityChangesForwarder connectivityChangesForwarder) {
+        if (!MerlinService.this.connectivityChangesRegisters.contains(connectivityChangesRegister)) {
             throw MerlinServiceDependencyMissingException.missing(ConnectivityChangesRegister.class);
         }
 
-        if (MerlinService.this.connectivityChangesForwarder == null) {
+        if (!MerlinService.this.connectivityChangesForwarders.contains(connectivityChangesForwarder)) {
             throw MerlinServiceDependencyMissingException.missing(ConnectivityChangesForwarder.class);
+        }
+    }
+
+    private void forward(ConnectivityChangeEvent connectivityChangeEvent) {
+        for(ConnectivityChangesForwarder connectivityChangesForwarder : connectivityChangesForwarders) {
+            connectivityChangesForwarder.forward(connectivityChangeEvent);
         }
     }
 
@@ -77,19 +77,28 @@ public class MerlinService extends Service {
             if (!canNotify()) {
                 throw new IllegalStateException("You must call canNotify() before calling notify(ConnectivityChangeEvent)");
             }
-            MerlinService.this.connectivityChangesForwarder.forward(connectivityChangeEvent);
+            MerlinService.this.forward(connectivityChangeEvent);
         }
 
-        void setConnectivityChangesRegister(ConnectivityChangesRegister connectivityChangesRegister) {
-            MerlinService.this.connectivityChangesRegister = connectivityChangesRegister;
+        void addConnectivityChangesRegister(ConnectivityChangesRegister connectivityChangesRegister) {
+            MerlinService.this.connectivityChangesRegisters.add(connectivityChangesRegister);
         }
 
-        void setConnectivityChangesForwarder(ConnectivityChangesForwarder connectivityChangesForwarder) {
-            MerlinService.this.connectivityChangesForwarder = connectivityChangesForwarder;
+        void addConnectivityChangesForwarder(ConnectivityChangesForwarder connectivityChangesForwarder) {
+            MerlinService.this.connectivityChangesForwarders.add(connectivityChangesForwarder);
         }
 
-        void onBindComplete() {
-            MerlinService.this.start();
+        void onBindComplete(ConnectivityChangesRegister connectivityChangesRegister, ConnectivityChangesForwarder connectivityChangesForwarder) {
+            MerlinService.this.start(connectivityChangesRegister, connectivityChangesForwarder);
+        }
+
+        void removeConnectivityChangesRegister(ConnectivityChangesRegister connectivityChangesRegister) {
+            connectivityChangesRegister.unregister();
+            MerlinService.this.connectivityChangesRegisters.remove(connectivityChangesRegister);
+        }
+
+        void removeConnectivityChangesForwarder(ConnectivityChangesForwarder connectivityChangesForwarder) {
+            MerlinService.this.connectivityChangesForwarders.remove(connectivityChangesForwarder);
         }
     }
 
